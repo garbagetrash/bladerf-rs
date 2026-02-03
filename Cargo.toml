@@ -1,0 +1,7 @@
+[package]
+name = "bladerf-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bladerf-sys = { git = "https://github.com/garbagetrash/bladerf-sys" }
