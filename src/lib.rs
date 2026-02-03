@@ -1,6 +1,7 @@
-use std::ffi::{CStr, CString};
+use std::ffi::{c_void, CStr, CString};
 
 use bladerf_sys::*;
+use num_complex::Complex;
 
 pub fn get_version() -> bladerf_version {
     let mut v = bladerf_version {
@@ -19,22 +20,69 @@ pub struct BladeRfDevice {
 }
 
 impl BladeRfDevice {
-    pub fn from_device_serial(serial: &str) -> Self {
+    pub fn from_device_serial(serial: &str) -> Option<Self> {
         let device_string = CString::new(format!("*:serial={}", serial)).expect("failed to convert String -> CString");
         let mut devptr: *mut bladerf = std::ptr::null_mut();
         let status = unsafe { bladerf_open(&mut devptr, device_string.as_ptr()) };
-        return Self { handle: devptr }
+        if status >= 0 {
+            Some(Self { handle: devptr })
+        } else {
+            None
+        }
     }
 
     pub fn get_devinfo(&self) -> BladeRfDevInfo {
-        let mut devinfo: *mut bladerf_devinfo = std::ptr::null_mut();
-        let _status = unsafe { bladerf_get_devinfo(self.handle, devinfo) };
-        BladeRfDevInfo::from(unsafe { *devinfo })
+        let mut devinfo = bladerf_devinfo {
+            backend: 0,
+            serial: [0; 33],
+            usb_bus: 0,
+            usb_addr: 0,
+            instance: 0,
+            manufacturer: [0; 33],
+            product: [0; 33],
+        };
+        let _status = unsafe { bladerf_get_devinfo(self.handle, &mut devinfo) };
+        BladeRfDevInfo::from(devinfo)
+    }
+
+    pub fn get_samplerate(&self, channel: i32) -> u32 {
+        let mut samplerate = 0;
+        let status = unsafe { bladerf_get_sample_rate(self.handle, channel, &mut samplerate) };
+        samplerate
+    }
+
+    pub fn set_samplerate(&self, samplerate: u32, channel: i32) -> u32 {
+        let mut actual_samplerate = 0;
+        let status = unsafe { bladerf_set_sample_rate(self.handle, channel, samplerate, &mut actual_samplerate) };
+        actual_samplerate
+    }
+
+    pub fn get_bias_tee(&self, channel: i32) -> bool {
+        let mut enable = false;
+        let status = unsafe { bladerf_get_bias_tee(self.handle, channel, &mut enable) };
+        enable
+    }
+
+    pub fn set_bias_tee(&self, enable: bool, channel: i32) {
+        let status = unsafe { bladerf_set_bias_tee(self.handle, channel, enable) };
+    }
+
+    // TODO: this
+    // Need to call bladerf_sync_config first, and bladerf_enable_module
+    pub fn sync_rx(&mut self, num_samples: u32) -> Vec<Complex<i16>> {
+        let mut samples = vec![Complex::<i16>::ZERO; num_samples as usize];
+        let mut meta = std::ptr::null_mut();
+        let timeout_ms = 1000;
+
+        let (ptr, len, cap) = samples.into_raw_parts();
+        let status = unsafe { bladerf_sync_rx(self.handle, ptr as *mut c_void, num_samples, meta, timeout_ms) };
+        unsafe { Vec::from_raw_parts(ptr, len, cap) }
     }
 }
 
 impl Drop for BladeRfDevice {
     fn drop(&mut self) {
+        //println!("dropping {:?}", self);
         unsafe { bladerf_close(self.handle); };
     }
 }
@@ -63,8 +111,9 @@ impl BladeRfDevInfo {
         }
     }
 
-    pub fn open(&mut self) -> BladeRfDevice {
-        // TODO: Can we open again if its already open?
+    pub fn open(&mut self) -> Option<BladeRfDevice> {
+        // TODO: Can we open again if its already open? No, but this returns "successfully with a
+        // handle of 0x0, which is invalid. Need to do something here...
         BladeRfDevice::from_device_serial(&self.serial)
     }
 }
@@ -111,9 +160,20 @@ mod tests {
         let mut v = get_devices();
         println!("Devices: {:?}", v);
         if v.len() > 0 {
-            let brf_handle = v[0].open();
-            println!("handle: {:?}", brf_handle);
-            println!("handle.devinfo(): {:?}", brf_handle.get_devinfo());
+            // does drop work?
+            let mut brf = v[0].open().expect("failed to open");
+            println!("handle: {:?}", brf);
+            println!("handle.devinfo(): {:?}", brf.get_devinfo());
+            let actual = brf.set_samplerate(10_000_000, 1);
+            println!("actual: {}", actual);
+            println!("samplerate(0): {}", brf.get_samplerate(0));
+            println!("samplerate(1): {}", brf.get_samplerate(1));
+            println!("samplerate(2): {}", brf.get_samplerate(2));
+            println!("samplerate(3): {}", brf.get_samplerate(3));
+            brf.set_bias_tee(true, 0);
+            println!("bias_tee: {}", brf.get_bias_tee(0));
+            brf.set_bias_tee(false, 0);
+            println!("bias_tee: {}", brf.get_bias_tee(0));
         }
         assert_eq!(4, 4);
     }
