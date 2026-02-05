@@ -17,21 +17,40 @@ pub fn get_version() -> bladerf_version {
 #[derive(Clone, Debug)]
 pub struct BladeRfDevice {
     handle: *mut bladerf,
+    samples_per_block: usize,
 }
 
 impl BladeRfDevice {
     pub fn from_device_serial(serial: &str) -> Option<Self> {
+        // Open device using given serial
         let device_string = CString::new(format!("*:serial={}", serial)).expect("failed to convert String -> CString");
         let mut devptr: *mut bladerf = std::ptr::null_mut();
-        let status = unsafe { bladerf_open(&mut devptr, device_string.as_ptr()) };
-        if status >= 0 {
-            Some(Self { handle: devptr })
-        } else {
+        if unsafe { bladerf_open(&mut devptr, device_string.as_ptr()) } < 0 {
+            return None;
+        }
+
+        // Configuration for synchronous operation
+        let layout = bladerf_channel_layout_BLADERF_RX_X1;
+        let format = bladerf_format_BLADERF_FORMAT_SC16_Q11;
+        //let format = bladerf_format_BLADERF_FORMAT_SC8_Q7;
+        let bufsize_samples = 8192;
+        let ntransfers = 4;
+        let nbuffers = 4 * ntransfers;
+        let stream_timeout = 0;
+        if unsafe { bladerf_sync_config(devptr, layout, format, nbuffers, bufsize_samples, ntransfers, stream_timeout) } < 0 {
+            return None;
+        }
+
+        // Now enable channel 0???
+        let channel = 0;
+        if unsafe { bladerf_enable_module(devptr, channel, true) } < 0 {
             None
+        } else {
+            Some(BladeRfDevice { handle: devptr, samples_per_block: bufsize_samples as usize })
         }
     }
 
-    pub fn get_devinfo(&self) -> BladeRfDevInfo {
+    pub fn get_devinfo(&self) -> Option<BladeRfDevInfo> {
         let mut devinfo = bladerf_devinfo {
             backend: 0,
             serial: [0; 33],
@@ -41,8 +60,11 @@ impl BladeRfDevice {
             manufacturer: [0; 33],
             product: [0; 33],
         };
-        let _status = unsafe { bladerf_get_devinfo(self.handle, &mut devinfo) };
-        BladeRfDevInfo::from(devinfo)
+        if unsafe { bladerf_get_devinfo(self.handle, &mut devinfo) } < 0 {
+            None
+        } else {
+            Some(BladeRfDevInfo::from(devinfo))
+        }
     }
 
     pub fn get_samplerate(&self, channel: i32) -> u32 {
@@ -89,15 +111,14 @@ impl BladeRfDevice {
         actual
     }
 
-    // TODO: this
-    // Need to call bladerf_sync_config first, and bladerf_enable_module
-    pub fn sync_rx(&mut self, num_samples: u32) -> Vec<Complex<i16>> {
-        let mut samples = vec![Complex::<i16>::ZERO; num_samples as usize];
+    pub fn recv(&mut self, num_blocks: usize) -> Vec<Complex<i16>> {
+        let num_samples = num_blocks * self.samples_per_block;
+        let mut samples = vec![Complex::<i16>::ZERO; num_samples];
         let mut meta = std::ptr::null_mut();
         let timeout_ms = 1000;
 
         let (ptr, len, cap) = samples.into_raw_parts();
-        let status = unsafe { bladerf_sync_rx(self.handle, ptr as *mut c_void, num_samples, meta, timeout_ms) };
+        let status = unsafe { bladerf_sync_rx(self.handle, ptr as *mut c_void, num_samples as u32, meta, timeout_ms) };
         unsafe { Vec::from_raw_parts(ptr, len, cap) }
     }
 }
@@ -208,6 +229,9 @@ mod tests {
             println!("bandwidth: {}", brf.get_bandwidth(0));
             brf.set_bandwidth(2_000_000, 0);
             println!("bandwidth: {}", brf.get_bandwidth(0));
+
+            let samples = brf.recv(2);
+            println!("samples.len(): {}", samples.len());
         }
         assert_eq!(4, 4);
     }
