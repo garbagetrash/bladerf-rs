@@ -67,6 +67,16 @@ impl BladeRfDevice {
         let status = unsafe { bladerf_set_bias_tee(self.handle, channel, enable) };
     }
 
+    pub fn get_frequency(&self, channel: i32) -> u64 {
+        let mut frequency = 0;
+        let status = unsafe { bladerf_get_frequency(self.handle, channel, &mut frequency) };
+        frequency
+    }
+
+    pub fn set_frequency(&self, frequency: u64, channel: i32) {
+        let status = unsafe { bladerf_set_frequency(self.handle, channel, frequency) };
+    }
+
     // TODO: this
     // Need to call bladerf_sync_config first, and bladerf_enable_module
     pub fn sync_rx(&mut self, num_samples: u32) -> Vec<Complex<i16>> {
@@ -174,6 +184,10 @@ mod tests {
             println!("bias_tee: {}", brf.get_bias_tee(0));
             brf.set_bias_tee(false, 0);
             println!("bias_tee: {}", brf.get_bias_tee(0));
+            brf.set_frequency(100_000_000, 0);
+            println!("frequency: {}", brf.get_frequency(0));
+            brf.set_frequency(200_000_000, 0);
+            println!("frequency: {}", brf.get_frequency(0));
         }
         assert_eq!(4, 4);
     }
