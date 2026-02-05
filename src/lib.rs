@@ -77,6 +77,18 @@ impl BladeRfDevice {
         let status = unsafe { bladerf_set_frequency(self.handle, channel, frequency) };
     }
 
+    pub fn get_bandwidth(&self, channel: i32) -> u32 {
+        let mut bandwidth = 0;
+        let status = unsafe { bladerf_get_bandwidth(self.handle, channel, &mut bandwidth) };
+        bandwidth
+    }
+
+    pub fn set_bandwidth(&self, bandwidth: u32, channel: i32) -> u32 {
+        let mut actual = 0;
+        let status = unsafe { bladerf_set_bandwidth(self.handle, channel, bandwidth, &mut actual) };
+        actual
+    }
+
     // TODO: this
     // Need to call bladerf_sync_config first, and bladerf_enable_module
     pub fn sync_rx(&mut self, num_samples: u32) -> Vec<Complex<i16>> {
@@ -174,20 +186,28 @@ mod tests {
             let mut brf = v[0].open().expect("failed to open");
             println!("handle: {:?}", brf);
             println!("handle.devinfo(): {:?}", brf.get_devinfo());
+
             let actual = brf.set_samplerate(10_000_000, 1);
             println!("actual: {}", actual);
             println!("samplerate(0): {}", brf.get_samplerate(0));
             println!("samplerate(1): {}", brf.get_samplerate(1));
             println!("samplerate(2): {}", brf.get_samplerate(2));
             println!("samplerate(3): {}", brf.get_samplerate(3));
+
             brf.set_bias_tee(true, 0);
             println!("bias_tee: {}", brf.get_bias_tee(0));
             brf.set_bias_tee(false, 0);
             println!("bias_tee: {}", brf.get_bias_tee(0));
+
             brf.set_frequency(100_000_000, 0);
             println!("frequency: {}", brf.get_frequency(0));
             brf.set_frequency(200_000_000, 0);
             println!("frequency: {}", brf.get_frequency(0));
+
+            brf.set_bandwidth(1_000_000, 0);
+            println!("bandwidth: {}", brf.get_bandwidth(0));
+            brf.set_bandwidth(2_000_000, 0);
+            println!("bandwidth: {}", brf.get_bandwidth(0));
         }
         assert_eq!(4, 4);
     }
