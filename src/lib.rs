@@ -31,7 +31,7 @@ impl BladeRfDevice {
 
         // Configuration for synchronous operation
         let layout = bladerf_channel_layout_BLADERF_RX_X1;
-        let format = bladerf_format_BLADERF_FORMAT_SC16_Q11;
+        let format = bladerf_format_BLADERF_FORMAT_SC16_Q11_META;
         //let format = bladerf_format_BLADERF_FORMAT_SC8_Q7;
         let bufsize_samples = 8192;
         let ntransfers = 4;
@@ -114,11 +114,20 @@ impl BladeRfDevice {
     pub fn recv(&mut self, num_blocks: usize) -> Vec<Complex<i16>> {
         let num_samples = num_blocks * self.samples_per_block;
         let mut samples = vec![Complex::<i16>::ZERO; num_samples];
-        let mut meta = std::ptr::null_mut();
+        let mut meta = bladerf_metadata {
+            timestamp: 0,
+            flags: BLADERF_META_FLAG_RX_NOW,
+            status: 0,
+            actual_count: 0,
+            reserved: [0; 32],
+        };
         let timeout_ms = 1000;
 
         let (ptr, len, cap) = samples.into_raw_parts();
-        let status = unsafe { bladerf_sync_rx(self.handle, ptr as *mut c_void, num_samples as u32, meta, timeout_ms) };
+        let status = unsafe { bladerf_sync_rx(self.handle, ptr as *mut c_void, num_samples as u32, &mut meta, timeout_ms) };
+        if meta.status & BLADERF_META_STATUS_OVERRUN > 0 {
+            eprintln!("{}", format!("Sample overrun detected, {} valid samples read", meta.actual_count));
+        }
         unsafe { Vec::from_raw_parts(ptr, len, cap) }
     }
 }
