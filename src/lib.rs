@@ -17,28 +17,9 @@ pub fn get_version() -> bladerf_version {
 }
 
 #[derive(Clone, Debug)]
-struct RingBuffer<const N: usize> {
-    buffer: [[Complex<i16>; 8192]; N],
-    pub idx: usize,
-}
-
-impl<const N: usize> RingBuffer<N> {
-    pub fn new() -> Self {
-        Self {
-            buffer: [[Complex::<i16>::new(0, 0); 8192]; N],
-            idx: 0,
-        }
-    }
-
-    pub fn get_write_ptr(&mut self) -> *mut c_void {
-        self.buffer[self.idx].as_mut_ptr() as *mut c_void
-    }
-}
-
-#[derive(Clone, Debug)]
 pub struct BladeRfDevice {
     handle: *mut bladerf,
-    ring_buffer: RingBuffer<16>,
+    buffer: [Complex<i16>; 8192],
 }
 
 impl BladeRfDevice {
@@ -55,9 +36,9 @@ impl BladeRfDevice {
         let layout = bladerf_channel_layout_BLADERF_RX_X1;
         let format = bladerf_format_BLADERF_FORMAT_SC16_Q11_META;
         //let format = bladerf_format_BLADERF_FORMAT_SC8_Q7;
-        let bufsize_samples = 8192;
-        let ntransfers = 8;
-        let nbuffers = 2 * ntransfers;
+        let bufsize_samples = 16384;
+        let ntransfers = 16;
+        let nbuffers = 4 * ntransfers;
         let stream_timeout = 0;
         if unsafe {
             bladerf_sync_config(
@@ -81,7 +62,7 @@ impl BladeRfDevice {
         } else {
             Some(BladeRfDevice {
                 handle: devptr,
-                ring_buffer: RingBuffer::<16>::new(),
+                buffer: [Complex::<i16>::new(0, 0); 8192],
             })
         }
     }
@@ -178,7 +159,7 @@ impl BladeRfDevice {
         let timeout_ms = 1000;
 
         //let (ptr, len, cap) = samples.into_raw_parts();
-        let ptr = self.ring_buffer.get_write_ptr();
+        let ptr = self.buffer.as_mut_ptr() as *mut c_void;
         if unsafe {
             bladerf_sync_rx(
                 self.handle,
@@ -199,10 +180,7 @@ impl BladeRfDevice {
                 )
             );
         }
-        let output_ref = &self.ring_buffer.buffer[self.ring_buffer.idx];
-        self.ring_buffer.idx += 1;
-        self.ring_buffer.idx %= 16;
-        output_ref
+        &self.buffer
     }
 }
 
@@ -319,7 +297,7 @@ mod tests {
             brf.set_bandwidth(2_000_000, 0);
             println!("bandwidth: {}", brf.get_bandwidth(0));
 
-            let samples = brf.recv(2);
+            let samples = brf.recv();
             println!("samples.len(): {}", samples.len());
         }
         assert_eq!(4, 4);
