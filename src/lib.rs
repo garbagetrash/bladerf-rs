@@ -17,9 +17,28 @@ pub fn get_version() -> bladerf_version {
 }
 
 #[derive(Clone, Debug)]
+struct RingBuffer<const N: usize> {
+    buffer: [[Complex<i16>; 8192]; N],
+    pub idx: usize,
+}
+
+impl<const N: usize> RingBuffer<N> {
+    pub fn new() -> Self {
+        Self {
+            buffer: [[Complex::<i16>::new(0, 0); 8192]; N],
+            idx: 0,
+        }
+    }
+
+    pub fn get_write_ptr(&mut self) -> *mut c_void {
+        self.buffer[self.idx].as_mut_ptr() as *mut c_void
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct BladeRfDevice {
     handle: *mut bladerf,
-    samples_per_block: usize,
+    ring_buffer: RingBuffer<16>,
 }
 
 impl BladeRfDevice {
@@ -62,7 +81,7 @@ impl BladeRfDevice {
         } else {
             Some(BladeRfDevice {
                 handle: devptr,
-                samples_per_block: bufsize_samples as usize,
+                ring_buffer: RingBuffer::<16>::new(),
             })
         }
     }
@@ -86,53 +105,69 @@ impl BladeRfDevice {
 
     pub fn get_samplerate(&self, channel: i32) -> u32 {
         let mut samplerate = 0;
-        let status = unsafe { bladerf_get_sample_rate(self.handle, channel, &mut samplerate) };
+        if unsafe { bladerf_get_sample_rate(self.handle, channel, &mut samplerate) } != 0 {
+            eprintln!("failed to get samplerate");
+        }
         samplerate
     }
 
     pub fn set_samplerate(&self, samplerate: u32, channel: i32) -> u32 {
         let mut actual_samplerate = 0;
-        let status = unsafe {
+        if unsafe {
             bladerf_set_sample_rate(self.handle, channel, samplerate, &mut actual_samplerate)
-        };
+        } != 0 {
+            eprintln!("failed to set samplerate");
+        }
         actual_samplerate
     }
 
     pub fn get_bias_tee(&self, channel: i32) -> bool {
         let mut enable = false;
-        let status = unsafe { bladerf_get_bias_tee(self.handle, channel, &mut enable) };
+        if unsafe { bladerf_get_bias_tee(self.handle, channel, &mut enable) } != 0 {
+            eprintln!("failed to get bias tee");
+        }
         enable
     }
 
     pub fn set_bias_tee(&self, enable: bool, channel: i32) {
-        let status = unsafe { bladerf_set_bias_tee(self.handle, channel, enable) };
+        if unsafe { bladerf_set_bias_tee(self.handle, channel, enable) } != 0 {
+            eprintln!("failed to set bias tee");
+        }
     }
 
     pub fn get_frequency(&self, channel: i32) -> u64 {
         let mut frequency = 0;
-        let status = unsafe { bladerf_get_frequency(self.handle, channel, &mut frequency) };
+        if unsafe { bladerf_get_frequency(self.handle, channel, &mut frequency) } != 0 {
+            eprintln!("failed to get frequency");
+        }
         frequency
     }
 
     pub fn set_frequency(&self, frequency: u64, channel: i32) {
-        let status = unsafe { bladerf_set_frequency(self.handle, channel, frequency) };
+        if unsafe { bladerf_set_frequency(self.handle, channel, frequency) } != 0 {
+            eprintln!("failed to set frequency");
+        }
     }
 
     pub fn get_bandwidth(&self, channel: i32) -> u32 {
         let mut bandwidth = 0;
-        let status = unsafe { bladerf_get_bandwidth(self.handle, channel, &mut bandwidth) };
+        if unsafe { bladerf_get_bandwidth(self.handle, channel, &mut bandwidth) } != 0 {
+            eprintln!("failed to get bandwidth");
+        }
         bandwidth
     }
 
     pub fn set_bandwidth(&self, bandwidth: u32, channel: i32) -> u32 {
         let mut actual = 0;
-        let status = unsafe { bladerf_set_bandwidth(self.handle, channel, bandwidth, &mut actual) };
+        if unsafe { bladerf_set_bandwidth(self.handle, channel, bandwidth, &mut actual) } != 0 {
+            eprintln!("failed to set bandwidth");
+        }
         actual
     }
 
-    pub fn recv(&mut self, num_blocks: usize) -> Vec<Complex<i16>> {
-        let num_samples = num_blocks * self.samples_per_block;
-        let mut samples = vec![Complex::<i16>::ZERO; num_samples];
+    pub fn recv(&mut self) -> &[Complex<i16>] {
+        //let mut samples = vec![Complex::<i16>::ZERO; num_samples];
+        let num_samples = 8192;
         let mut meta = bladerf_metadata {
             timestamp: 0,
             flags: BLADERF_META_FLAG_RX_NOW,
@@ -142,16 +177,19 @@ impl BladeRfDevice {
         };
         let timeout_ms = 1000;
 
-        let (ptr, len, cap) = samples.into_raw_parts();
-        let status = unsafe {
+        //let (ptr, len, cap) = samples.into_raw_parts();
+        let ptr = self.ring_buffer.get_write_ptr();
+        if unsafe {
             bladerf_sync_rx(
                 self.handle,
-                ptr as *mut c_void,
-                num_samples as u32,
+                ptr,
+                num_samples,
                 &mut meta,
                 timeout_ms,
             )
-        };
+        } != 0 {
+            eprintln!("bladerf_sync_rx failed");
+        }
         if meta.status & BLADERF_META_STATUS_OVERRUN > 0 {
             eprintln!(
                 "{}",
@@ -161,7 +199,10 @@ impl BladeRfDevice {
                 )
             );
         }
-        unsafe { Vec::from_raw_parts(ptr, len, cap) }
+        let output_ref = &self.ring_buffer.buffer[self.ring_buffer.idx];
+        self.ring_buffer.idx += 1;
+        self.ring_buffer.idx %= 16;
+        output_ref
     }
 }
 
