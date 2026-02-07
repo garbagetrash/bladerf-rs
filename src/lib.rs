@@ -96,7 +96,8 @@ impl BladeRfDevice {
         let mut actual_samplerate = 0;
         if unsafe {
             bladerf_set_sample_rate(self.handle, channel, samplerate, &mut actual_samplerate)
-        } != 0 {
+        } != 0
+        {
             eprintln!("failed to set samplerate");
         }
         actual_samplerate
@@ -160,15 +161,7 @@ impl BladeRfDevice {
 
         //let (ptr, len, cap) = samples.into_raw_parts();
         let ptr = self.buffer.as_mut_ptr() as *mut c_void;
-        if unsafe {
-            bladerf_sync_rx(
-                self.handle,
-                ptr,
-                num_samples,
-                &mut meta,
-                timeout_ms,
-            )
-        } != 0 {
+        if unsafe { bladerf_sync_rx(self.handle, ptr, num_samples, &mut meta, timeout_ms) } != 0 {
             eprintln!("bladerf_sync_rx failed");
         }
         if meta.status & BLADERF_META_STATUS_OVERRUN > 0 {
