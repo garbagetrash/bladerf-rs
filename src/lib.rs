@@ -1,4 +1,4 @@
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_void};
 
 use bladerf_sys::*;
 use num_complex::Complex;
@@ -10,7 +10,9 @@ pub fn get_version() -> bladerf_version {
         patch: 0,
         describe: std::ptr::null(),
     };
-    unsafe { bladerf_version(&mut v); };
+    unsafe {
+        bladerf_version(&mut v);
+    };
     v
 }
 
@@ -23,7 +25,8 @@ pub struct BladeRfDevice {
 impl BladeRfDevice {
     pub fn from_device_serial(serial: &str) -> Option<Self> {
         // Open device using given serial
-        let device_string = CString::new(format!("*:serial={}", serial)).expect("failed to convert String -> CString");
+        let device_string = CString::new(format!("*:serial={}", serial))
+            .expect("failed to convert String -> CString");
         let mut devptr: *mut bladerf = std::ptr::null_mut();
         if unsafe { bladerf_open(&mut devptr, device_string.as_ptr()) } < 0 {
             return None;
@@ -34,10 +37,21 @@ impl BladeRfDevice {
         let format = bladerf_format_BLADERF_FORMAT_SC16_Q11_META;
         //let format = bladerf_format_BLADERF_FORMAT_SC8_Q7;
         let bufsize_samples = 8192;
-        let ntransfers = 4;
-        let nbuffers = 4 * ntransfers;
+        let ntransfers = 8;
+        let nbuffers = 2 * ntransfers;
         let stream_timeout = 0;
-        if unsafe { bladerf_sync_config(devptr, layout, format, nbuffers, bufsize_samples, ntransfers, stream_timeout) } < 0 {
+        if unsafe {
+            bladerf_sync_config(
+                devptr,
+                layout,
+                format,
+                nbuffers,
+                bufsize_samples,
+                ntransfers,
+                stream_timeout,
+            )
+        } < 0
+        {
             return None;
         }
 
@@ -46,7 +60,10 @@ impl BladeRfDevice {
         if unsafe { bladerf_enable_module(devptr, channel, true) } < 0 {
             None
         } else {
-            Some(BladeRfDevice { handle: devptr, samples_per_block: bufsize_samples as usize })
+            Some(BladeRfDevice {
+                handle: devptr,
+                samples_per_block: bufsize_samples as usize,
+            })
         }
     }
 
@@ -75,7 +92,9 @@ impl BladeRfDevice {
 
     pub fn set_samplerate(&self, samplerate: u32, channel: i32) -> u32 {
         let mut actual_samplerate = 0;
-        let status = unsafe { bladerf_set_sample_rate(self.handle, channel, samplerate, &mut actual_samplerate) };
+        let status = unsafe {
+            bladerf_set_sample_rate(self.handle, channel, samplerate, &mut actual_samplerate)
+        };
         actual_samplerate
     }
 
@@ -124,9 +143,23 @@ impl BladeRfDevice {
         let timeout_ms = 1000;
 
         let (ptr, len, cap) = samples.into_raw_parts();
-        let status = unsafe { bladerf_sync_rx(self.handle, ptr as *mut c_void, num_samples as u32, &mut meta, timeout_ms) };
+        let status = unsafe {
+            bladerf_sync_rx(
+                self.handle,
+                ptr as *mut c_void,
+                num_samples as u32,
+                &mut meta,
+                timeout_ms,
+            )
+        };
         if meta.status & BLADERF_META_STATUS_OVERRUN > 0 {
-            eprintln!("{}", format!("Sample overrun detected, {} valid samples read", meta.actual_count));
+            eprintln!(
+                "{}",
+                format!(
+                    "Sample overrun detected, {} valid samples read",
+                    meta.actual_count
+                )
+            );
         }
         unsafe { Vec::from_raw_parts(ptr, len, cap) }
     }
@@ -135,7 +168,10 @@ impl BladeRfDevice {
 impl Drop for BladeRfDevice {
     fn drop(&mut self) {
         //println!("dropping {:?}", self);
-        unsafe { bladerf_close(self.handle); };
+        unsafe { bladerf_enable_module(self.handle, 0, true) };
+        unsafe {
+            bladerf_close(self.handle);
+        };
     }
 }
 
@@ -154,12 +190,18 @@ impl BladeRfDevInfo {
     pub fn from(devinfo: bladerf_devinfo) -> Self {
         Self {
             backend: devinfo.backend as u32,
-            serial: unsafe { CStr::from_ptr(devinfo.serial.as_ptr()) }.to_string_lossy().to_string(),
+            serial: unsafe { CStr::from_ptr(devinfo.serial.as_ptr()) }
+                .to_string_lossy()
+                .to_string(),
             usb_bus: devinfo.usb_bus,
             usb_addr: devinfo.usb_addr,
             instance: devinfo.instance,
-            manufacturer: unsafe { CStr::from_ptr(devinfo.manufacturer.as_ptr()) }.to_string_lossy().to_string(),
-            product: unsafe { CStr::from_ptr(devinfo.product.as_ptr()) }.to_string_lossy().to_string(),
+            manufacturer: unsafe { CStr::from_ptr(devinfo.manufacturer.as_ptr()) }
+                .to_string_lossy()
+                .to_string(),
+            product: unsafe { CStr::from_ptr(devinfo.product.as_ptr()) }
+                .to_string_lossy()
+                .to_string(),
         }
     }
 
@@ -175,12 +217,7 @@ pub fn get_devices() -> Vec<BladeRfDevInfo> {
     let n_devices = unsafe { bladerf_get_device_list(&mut devptr) };
     let sraw = if n_devices > 0 {
         if !devptr.is_null() {
-            unsafe {
-                std::slice::from_raw_parts(
-                    devptr,
-                    n_devices as usize,
-                )
-            }
+            unsafe { std::slice::from_raw_parts(devptr, n_devices as usize) }
         } else {
             // If devptr is NULL for some reason just return empty slice
             &[]
@@ -191,7 +228,9 @@ pub fn get_devices() -> Vec<BladeRfDevInfo> {
     };
     let output = sraw.iter().map(|v| BladeRfDevInfo::from(*v)).collect();
     if !devptr.is_null() {
-        unsafe { bladerf_free_device_list(devptr); }
+        unsafe {
+            bladerf_free_device_list(devptr);
+        }
     }
     output
 }
