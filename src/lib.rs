@@ -39,7 +39,7 @@ impl BladeRfDevice {
         let bufsize_samples = 16384;
         let ntransfers = 16;
         let nbuffers = 4 * ntransfers;
-        let stream_timeout = 0;
+        let stream_timeout = 3000;
         if unsafe {
             bladerf_sync_config(
                 devptr,
