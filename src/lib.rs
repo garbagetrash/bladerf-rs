@@ -39,6 +39,8 @@ impl BladeRfDevice {
         let bufsize_samples = 16384;
         let ntransfers = 16;
         let nbuffers = 4 * ntransfers;
+        // TODO: should optimize buffer size according to samplerate, should
+        // aim for minimal latency and timeouts without overruns.
         let stream_timeout = 3000;
         if unsafe {
             bladerf_sync_config(
