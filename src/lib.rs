@@ -157,7 +157,7 @@ impl BladeRfDevice {
             actual_count: 0,
             reserved: [0; 32],
         };
-        let timeout_ms = 1000;
+        let timeout_ms = 10_000;
 
         //let (ptr, len, cap) = samples.into_raw_parts();
         let ptr = self.buffer.as_mut_ptr() as *mut c_void;
