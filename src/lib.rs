@@ -22,6 +22,9 @@ pub struct BladeRfDevice {
     buffer: [Complex<i16>; 8192],
 }
 
+unsafe impl Send for BladeRfDevice {}
+unsafe impl Sync for BladeRfDevice {}
+
 impl BladeRfDevice {
     pub fn from_device_serial(serial: &str) -> Option<Self> {
         // Open device using given serial
