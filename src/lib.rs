@@ -60,8 +60,17 @@ impl BladeRfDevice {
             return None;
         }
 
-        // Now enable channel 0???
         let channel = 0;
+
+        // Set gain mode to hardware AGC
+        if unsafe {
+            bladerf_set_gain_mode(devptr, channel, bladerf_gain_mode_BLADERF_GAIN_DEFAULT)
+        } < 0
+        {
+            return None;
+        }
+
+        // Now enable channel 0???
         if unsafe { bladerf_enable_module(devptr, channel, true) } < 0 {
             None
         } else {
