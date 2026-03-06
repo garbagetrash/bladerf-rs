@@ -19,7 +19,7 @@ pub fn get_version() -> bladerf_version {
 #[derive(Clone, Debug)]
 pub struct BladeRfDevice {
     handle: *mut bladerf,
-    buffer: [Complex<i16>; 8192],
+    buffer: [Complex<i16>; 16384],
 }
 
 unsafe impl Send for BladeRfDevice {}
@@ -40,7 +40,7 @@ impl BladeRfDevice {
         let format = bladerf_format_BLADERF_FORMAT_SC16_Q11_META;
         //let format = bladerf_format_BLADERF_FORMAT_SC8_Q7;
         let bufsize_samples = 16384;
-        let ntransfers = 16;
+        let ntransfers = 32;
         let nbuffers = 4 * ntransfers;
         // TODO: should optimize buffer size according to samplerate, should
         // aim for minimal latency and timeouts without overruns.
@@ -76,7 +76,7 @@ impl BladeRfDevice {
         } else {
             Some(BladeRfDevice {
                 handle: devptr,
-                buffer: [Complex::<i16>::new(0, 0); 8192],
+                buffer: [Complex::<i16>::new(0, 0); 16384],
             })
         }
     }
@@ -163,7 +163,7 @@ impl BladeRfDevice {
 
     pub fn recv(&mut self) -> &[Complex<i16>] {
         //let mut samples = vec![Complex::<i16>::ZERO; num_samples];
-        let num_samples = 8192;
+        let num_samples = 16384;
         let mut meta = bladerf_metadata {
             timestamp: 0,
             flags: BLADERF_META_FLAG_RX_NOW,
