@@ -19,7 +19,7 @@ pub fn get_version() -> bladerf_version {
 #[derive(Clone, Debug)]
 pub struct BladeRfDevice {
     handle: *mut bladerf,
-    buffer: [Complex<i16>; 16384],
+    buffer: [Complex<i16>; 32768],
 }
 
 unsafe impl Send for BladeRfDevice {}
@@ -76,7 +76,7 @@ impl BladeRfDevice {
         } else {
             Some(BladeRfDevice {
                 handle: devptr,
-                buffer: [Complex::<i16>::new(0, 0); 16384],
+                buffer: [Complex::<i16>::new(0, 0); 32768],
             })
         }
     }
@@ -163,7 +163,7 @@ impl BladeRfDevice {
 
     pub fn recv(&mut self) -> &[Complex<i16>] {
         //let mut samples = vec![Complex::<i16>::ZERO; num_samples];
-        let num_samples = 16384;
+        let num_samples = 32768;
         let mut meta = bladerf_metadata {
             timestamp: 0,
             flags: BLADERF_META_FLAG_RX_NOW,
