@@ -39,7 +39,7 @@ impl BladeRfDevice {
         let layout = bladerf_channel_layout_BLADERF_RX_X1;
         let format = bladerf_format_BLADERF_FORMAT_SC16_Q11_META;
         //let format = bladerf_format_BLADERF_FORMAT_SC8_Q7;
-        let bufsize_samples = 16384;
+        let bufsize_samples = 32768;
         let ntransfers = 32;
         let nbuffers = 16 * ntransfers;
         // TODO: should optimize buffer size according to samplerate, should
